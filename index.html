@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interactive Planning Board 2.0</title>
+    <title>Digital Planning Canvas</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         :root {
@@ -44,38 +44,33 @@
         body {
             background-color: var(--bg-color);
             color: var(--text-color);
-            overflow-x: auto;
+            margin: 0;
+            overflow: hidden;
             font-family: 'Inter', system-ui, -apple-system, sans-serif;
             transition: background-color 0.3s, color 0.3s;
         }
         .board-container {
-            display: flex;
-            gap: 1.5rem;
-            padding: 2rem;
-            min-height: calc(100vh - 100px);
-            align-items: flex-start;
+            position: relative;
+            width: 100vw;
+            height: calc(100vh - 64px);
+            overflow: auto;
+            background-image: radial-gradient(var(--border-color) 1px, transparent 1px);
+            background-size: 30px 30px;
         }
-        .phase-lane {
-            background-color: var(--lane-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 0.75rem;
-            min-width: 320px;
-            max-width: 450px;
-            display: flex;
-            flex-direction: column;
-            transition: all 0.3s ease;
-        }
-        .phase-lane.hidden-divider {
-            background-color: transparent;
-            border: none;
-            background-image: linear-gradient(to right, var(--border-color) 1px, transparent 1px);
-            background-size: 320px 100%;
+        .job-wrapper {
+            position: absolute;
+            z-index: 10;
+            touch-action: none;
         }
         .job-card {
-            cursor: pointer;
+            cursor: grab;
             transition: transform 0.1s, box-shadow 0.1s;
             position: relative;
             z-index: 5;
+            user-select: none;
+        }
+        .job-card:active {
+            cursor: grabbing;
         }
         .job-card:hover {
             transform: translateY(-2px);
@@ -93,10 +88,6 @@
             height: 100%;
             pointer-events: none;
             z-index: 0;
-        }
-        .job-wrapper {
-            position: relative;
-            z-index: 10;
         }
         .anchor-point {
             position: absolute;
@@ -124,16 +115,30 @@
         .anchor-tr { top: -4px; right: -4px; }
         .anchor-bl { bottom: -4px; left: -4px; }
         .anchor-br { bottom: -4px; right: -4px; }
+        .resize-handle {
+            position: absolute;
+            bottom: 0;
+            right: 0;
+            width: 12px;
+            height: 12px;
+            cursor: nwse-resize;
+            background: var(--border-color);
+            border-radius: 2px 0 0 0;
+            z-index: 25;
+            opacity: 0;
+            transition: opacity 0.2s;
+        }
+        .job-wrapper:hover .resize-handle {
+            opacity: 1;
+        }
     </style>
 </head>
 <body class="theme-dark">
- 
-    <!-- Top Navigation -->
     <header class="h-16 border-b border-slate-700 flex items-center justify-between px-6 sticky top-0 bg-slate-900/80 backdrop-blur-md z-50" style="background-color: var(--header-bg); border-color: var(--border-color); color: var(--text-color);">
         <div class="flex items-center gap-4">
-            <input type="text" id="boardTitle" onchange="saveBoardTitle()" class="text-xl font-bold tracking-tight bg-transparent border-b border-transparent hover:border-slate-500 focus:border-blue-500 outline-none px-1 transition-all" value="Planning Board 2.0">
-            <button onclick="addPhase()" class="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2">
-                <span>+</span> Add Phase
+            <input type="text" id="boardTitle" onchange="saveBoardTitle()" class="text-xl font-bold tracking-tight bg-transparent border-b border-transparent hover:border-slate-500 focus:border-blue-500 outline-none px-1 transition-all" value="Planning Canvas 2.0">
+            <button onclick="addJob()" class="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2">
+                <span>+</span> Add Node
             </button>
         </div>
         
@@ -145,39 +150,35 @@
                     <option value="theme-dracula">Dracula</option>
                     <option value="theme-vintage">Vintage</option>
                 </select>
-                <input type="checkbox" id="toggleDividers" onchange="toggleDividers()" class="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600 focus:ring-blue-500">
-                <label for="toggleDividers">Hide Phase Dividers</label>
             </div>
             <button onclick="clearAllConnections()" class="text-xs text-red-400 hover:text-red-300 underline">Clear All Arrows</button>
         </div>
     </header>
- 
+    
     <div class="relative">
-        <!-- SVG Layer for Arrows -->
         <svg id="canvas-svg"></svg>
- 
         <main id="board" class="board-container">
-            <!-- Phases will be injected here -->
+            <!-- Nodes injected here -->
         </main>
     </div>
- 
+    
     <!-- Job Modal -->
     <div id="jobModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center z-[100]">
         <div class="bg-slate-800 p-6 rounded-xl border border-slate-600 w-full max-w-md shadow-2xl text-white">
-            <h3 id="modalTitle" class="text-lg font-bold mb-4">Job Details</h3>
+            <h3 id="modalTitle" class="text-lg font-bold mb-4">Node Details</h3>
             <div class="space-y-4">
                 <div class="grid grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-xs text-slate-400 mb-1">Job Title</label>
+                        <label class="block text-xs text-slate-400 mb-1">Title</label>
                         <input type="text" id="jobTitle" class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
                     <div>
-                        <label class="block text-xs text-slate-400 mb-1">Responsible</label>
+                        <label class="block text-xs text-slate-400 mb-1">User</label>
                         <input type="text" id="jobUser" class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
                     </div>
                 </div>
                 <div>
-                    <label class="block text-xs text-slate-400 mb-1">Details</label>
+                    <label class="block text-xs text-slate-400 mb-1">Description</label>
                     <textarea id="jobDesc" rows="3" class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
                 </div>
                 <div class="grid grid-cols-2 gap-4">
@@ -191,7 +192,7 @@
                         </select>
                     </div>
                     <div>
-                        <label class="block text-xs text-slate-400 mb-1">Size</label>
+                        <label class="block text-xs text-slate-400 mb-1">Initial Size</label>
                         <select id="jobSize" class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-white outline-none">
                             <option value="small">Small</option>
                             <option value="medium" selected>Medium</option>
@@ -213,19 +214,19 @@
             </div>
             <div class="flex justify-end gap-3 mt-6">
                 <button onclick="closeModal()" class="px-4 py-2 text-slate-400 hover:text-white transition-colors">Cancel</button>
-                <button onclick="saveJob()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-md font-medium">Save Job</button>
+                <button onclick="saveJob()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-md font-medium">Save Node</button>
             </div>
         </div>
     </div>
- 
+    
     <!-- Connection Modal -->
-    <div id="connModal" class la-la" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center z-[110]">
+    <div id="connModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center z-[110]">
         <div class="bg-slate-800 p-6 rounded-xl border border-slate-600 w-full max-w-md shadow-2xl text-white">
-            <h3 class="text-lg font-bold mb-4">Connection Properties</h3>
+            <h3 class="text-lg font-bold mb-4">Connector Style</h3>
             <div class="space-y-4">
                 <div class="grid grid-cols-2 gap-4">
                     <div>
-                        <label class="block text-xs text-slate-400 mb-1">Style</label>
+                        <label class="block text-xs text-slate-400 mb-1">Line Type</label>
                         <select id="connStyle" class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-white outline-none">
                             <option value="line">Plain Line</option>
                             <option value="arrow">One-way Arrow</option>
@@ -251,19 +252,18 @@
             </div>
             <div class="flex justify-end gap-3 mt-6">
                 <button onclick="closeConnModal()" class="px-4 py-2 text-slate-400 hover:text-white transition-colors">Cancel</button>
-                <button onclick="saveConnection()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-md font-medium">Save Style</button>
+                <button onclick="saveConnection()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-md font-medium">Apply Style</button>
             </div>
         </div>
     </div>
- 
+    
     <script>
         let state = {
-            phases: [],
             jobs: [],
             connections: [],
             selectedJobId: null,
             currentColor: '#3b82f6',
-            boardTitle: 'Planning Board 2.0',
+            boardTitle: 'Planning Canvas 2.0',
             currentTheme: 'theme-dark'
         };
         
@@ -272,31 +272,36 @@
         let connectionSourceId = null;
         let connectionSourceAnchor = null;
         let currentConnColor = '#60a5fa';
+        
+        let isDragging = false;
+        let dragTarget = null;
+        let dragOffset = { x: 0, y: 0 };
+        
+        let isResizing = false;
+        let resizeTarget = null;
+        let resizeStartPos = { x: 0, y: 0, w: 0, h: 0 };
 
         function setTheme(theme) {
             state.currentTheme = theme;
             document.body.className = theme;
         }
-
+        
         function saveBoardTitle() {
             state.boardTitle = document.getElementById('boardTitle').value;
         }
-
-        function addPhase() {
-            const name = prompt("Enter Phase Name:", `Phase ${state.phases.length + 1}`);
-            if (!name) return;
-            
-            const phaseId = 'phase_' + Date.now();
-            state.phases.push({ id: phaseId, name: name });
-            renderBoard();
-        }
         
-        function addJob(phaseId) {
+        function addJob() {
             const jobId = 'job_' + Date.now();
+            const sizeMap = { small: {w: 160, h: 80}, medium: {w: 240, h: 112}, large: {w: 320, h: 160} };
+            const defaultSize = sizeMap.medium;
+
             state.jobs.push({
                 id: jobId,
-                phaseId: phaseId,
-                title: 'New Job',
+                x: 100 + (state.jobs.length * 20),
+                y: 100 + (state.jobs.length * 20),
+                width: defaultSize.w,
+                height: defaultSize.h,
+                title: 'New Node',
                 desc: '',
                 user: '',
                 color: state.currentColor,
@@ -334,7 +339,13 @@
             job.desc = document.getElementById('jobDesc').value;
             job.user = document.getElementById('jobUser').value;
             job.shape = document.getElementById('jobShape').value;
-            job.size = document.getElementById('jobSize').value;
+            
+            const sizeVal = document.getElementById('jobSize').value;
+            const sizeMap = { small: {w: 160, h: 80}, medium: {w: 240, h: 112}, large: {w: 320, h: 160} };
+            job.width = sizeMap[sizeVal].w;
+            job.height = sizeMap[sizeVal].h;
+            job.size = sizeVal;
+            
             job.color = state.currentColor;
             
             closeModal();
@@ -346,26 +357,11 @@
             currentEditingJobId = null;
         }
         
-        function toggleDividers() {
-            const isHidden = document.getElementById('toggleDividers').checked;
-            document.querySelectorAll('.phase-lane').forEach(lane => {
-                isHidden ? lane.classList.add('hidden-divider') : lane.classList.remove('hidden-divider');
-            });
+        function selectJob(jobId) {
+            state.selectedJobId = (state.selectedJobId === jobId) ? null : jobId;
+            renderBoard();
         }
         
-        function selectJob(jobId) {
-            if (state.selectedJobId === null) {
-                state.selectedJobId = jobId;
-                renderBoard();
-            } else if (state.selectedJobId === jobId) {
-                state.selectedJobId = null;
-                renderBoard();
-            } else {
-                state.selectedJobId = null;
-                renderBoard();
-            }
-        }
-
         function handleAnchorClick(jobId, anchorId) {
             if (!connectionSourceId) {
                 startConnection(jobId, anchorId);
@@ -373,13 +369,13 @@
                 endConnection(jobId, anchorId);
             }
         }
-
+        
         function startConnection(jobId, anchorId) {
             connectionSourceId = jobId;
             connectionSourceAnchor = anchorId;
             renderBoard();
         }
-
+        
         function endConnection(jobId, anchorId) {
             if (connectionSourceId === jobId) {
                 connectionSourceId = null;
@@ -387,13 +383,12 @@
                 renderBoard();
                 return;
             }
-
             createConnection(connectionSourceId, connectionSourceAnchor, jobId, anchorId);
             connectionSourceId = null;
             connectionSourceAnchor = null;
             renderBoard();
         }
-
+        
         function createConnection(fromId, fromAnchor, toId, toAnchor) {
             const existing = state.connections.find(c => c.from === toId && c.to === fromId);
             if (existing) {
@@ -430,29 +425,27 @@
             document.querySelectorAll('[data-conn-color]').forEach(el => {
                 el.style.borderColor = el.getAttribute('data-conn-color') === conn.color ? '#fff' : 'transparent';
             });
-
+            
             document.getElementById('connModal').style.display = 'flex';
         }
-
+        
         function setConnColor(color) {
             currentConnColor = color;
             document.querySelectorAll('[data-conn-color]').forEach(el => {
                 el.style.borderColor = el.getAttribute('data-conn-color') === color ? '#fff' : 'transparent';
             });
         }
-
+        
         function saveConnection() {
             const conn = state.connections.find(c => c.id === currentEditingConnId);
             conn.style = document.getElementById('connStyle').value;
             conn.thickness = parseInt(document.getElementById('connThickness').value);
             conn.color = currentConnColor;
-            
             conn.bidirectional = (conn.style === 'bidirectional');
-
             closeConnModal();
             renderBoard();
         }
-
+        
         function closeConnModal() {
             document.getElementById('connModal').style.display = 'none';
             currentEditingConnId = null;
@@ -462,48 +455,124 @@
             const board = document.getElementById('board');
             board.innerHTML = '';
             
-            state.phases.forEach(phase => {
-                const lane = document.createElement('div');
-                lane.className = `phase-lane ${document.getElementById('toggleDividers').checked ? 'hidden-divider' : ''}`;
+            state.jobs.forEach(job => {
+                const shapeClass = job.shape === 'circle' ? 'rounded-full aspect-square' : job.shape === 'pill' ? 'rounded-full' : job.shape === 'rounded' ? 'rounded-lg' : 'rounded-none';
                 
-                lane.innerHTML = `
-                    <div class="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50 rounded-t-xl">
-                        <h2 class="font-bold text-slate-200">${phase.name}</h2>
-                        <button onclick="addJob('${phase.id}')" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded text-slate-300 transition-colors">+ Job</button>
+                const wrapper = document.createElement('div');
+                wrapper.className = `job-wrapper ${shapeClass}`;
+                wrapper.style.left = `${job.x}px`;
+                wrapper.style.top = `${job.y}px`;
+                wrapper.style.width = `${job.width}px`;
+                wrapper.style.height = `${job.height}px`;
+                
+                const card = document.createElement('div');
+                card.className = `job-card p-3 w-full h-full rounded-inherit border-l-4 ${state.selectedJobId === job.id ? 'selected' : ''}`;
+                card.style.backgroundColor = '#2d3748';
+                card.style.borderColor = job.color;
+                card.onclick = (e) => {
+                    e.stopPropagation();
+                    selectJob(job.id);
+                };
+                card.onmousedown = (e) => {
+                    e.stopPropagation();
+                    startDrag(e, job.id);
+                };
+                
+                card.innerHTML = `
+                    <div class="flex justify-between items-start mb-1">
+                        <span class="font-semibold text-sm text-slate-100">${job.title}</span>
+                        <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-400">${job.user || 'Unassigned'}</span>
                     </div>
-                    <div class="p-3 space-y-3 flex-1">
-                        ${state.jobs.filter(j => j.phaseId === phase.id).map(job => {
-                            const sizeClass = job.size === 'small' ? 'w-48 h-24' : job.size === 'large' ? 'w-64 h-32' : 'w-60 h-28';
-                            const shapeClass = job.shape === 'circle' ? 'rounded-full aspect-square w-32 h-32' : job.shape === 'pill' ? 'rounded-full' : job.shape === 'rounded' ? 'rounded-lg' : 'rounded-none';
-                            
-                            return `
-                            <div class="job-wrapper ${sizeClass} ${shapeClass}">
-                                <div onclick="selectJob('${job.id}')" 
-                                     class="job-card p-3 w-full h-full rounded-inherit border-l-4 ${state.selectedJobId === job.id ? 'selected' : ''}" 
-                                     style="background-color: #2d3748; border-color: ${job.color}">
-                                    <div class="flex justify-between items-start mb-1">
-                                        <span class="font-semibold text-sm text-slate-100">${job.title}</span>
-                                        <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-400">${job.user || 'Unassigned'}</span>
-                                    </div>
-                                    <p class="text-xs text-slate-400 line-clamp-2">${job.desc || 'No details...'}</p>
-                                </div>
-                                <div class="anchor-point anchor-top" onclick="event.stopPropagation(); handleAnchorClick('${job.id}', 'top')"></div>
-                                <div class="anchor-point anchor-bottom" onclick="event.stopPropagation(); handleAnchorClick('${job.id}', 'bottom')"></div>
-                                <div class="anchor-point anchor-left" onclick="event.stopPropagation(); handleAnchorClick('${job.id}', 'left')"></div>
-                                <div class="anchor-point anchor-right" onclick="event.stopPropagation(); handleAnchorClick('${job.id}', 'right')"></div>
-                                <div class="anchor-point anchor-tl" onclick="event.stopPropagation(); handleAnchorClick('${job.id}', 'tl')"></div>
-                                <div class="anchor-point anchor-tr" onclick="event.stopPropagation(); handleAnchorClick('${job.id}', 'tr')"></div>
-                                <div class="anchor-point anchor-bl" onclick="event.stopPropagation(); handleAnchorClick('${job.id}', 'bl')"></div>
-                                <div class="anchor-point anchor-br" onclick="event.stopPropagation(); handleAnchorClick('${job.id}', 'br')"></div>
-                            </div>
-                            `;
-                        }).join('')}
-                    </div>
+                    <p class="text-xs text-slate-400 line-clamp-2">${job.desc || 'No details...'}</p>
                 `;
-                board.appendChild(lane);
+                
+                wrapper.appendChild(card);
+                
+                const anchors = [
+                    { id: 'top', class: 'anchor-top' },
+                    { id: 'bottom', class: 'anchor-bottom' },
+                    { id: 'left', class: 'anchor-left' },
+                    { id: 'right', class: 'anchor-right' },
+                    { id: 'tl', class: 'anchor-tl' },
+                    { id: 'tr', class: 'anchor-tr' },
+                    { id: 'bl', class: 'anchor-bl' },
+                    { id: 'br', class: 'anchor-br' },
+                ];
+                
+                anchors.forEach(a => {
+                    const anchor = document.createElement('div');
+                    anchor.className = `anchor-point ${a.class}`;
+                    anchor.onclick = (e) => {
+                        e.stopPropagation();
+                        handleAnchorClick(job.id, a.id);
+                    };
+                    wrapper.appendChild(anchor);
+                });
+                
+                const resizeHandle = document.createElement('div');
+                resizeHandle.className = 'resize-handle';
+                resizeHandle.onmousedown = (e) => {
+                    e.stopPropagation();
+                    startResize(e, job.id);
+                };
+                wrapper.appendChild(resizeHandle);
+                
+                board.appendChild(wrapper);
             });
             
             drawConnections();
+        }
+        
+        function startDrag(e, jobId) {
+            isDragging = true;
+            dragTarget = state.jobs.find(j => j.id === jobId);
+            dragOffset.x = e.clientX - dragTarget.x;
+            dragOffset.y = e.clientY - dragTarget.y;
+            
+            const moveHandler = (me) => {
+                if (!isDragging) return;
+                dragTarget.x = me.clientX - dragOffset.x;
+                dragTarget.y = me.clientY - dragOffset.y;
+                renderBoard();
+            };
+            
+            const upHandler = () => {
+                isDragging = false;
+                window.removeEventListener('mousemove', moveHandler);
+                window.removeEventListener('mouseup', upHandler);
+            };
+            
+            window.addEventListener('mousemove', moveHandler);
+            window.addEventListener('mouseup', upHandler);
+        }
+        
+        function startResize(e, jobId) {
+            isResizing = true;
+            resizeTarget = state.jobs.find(j => j.id === jobId);
+            resizeStartPos = { 
+                x: e.clientX, 
+                y: e.clientY, 
+                w: resizeTarget.width, 
+                h: resizeTarget.height 
+            };
+            
+            const moveHandler = (me) => {
+                if (!isResizing) return;
+                const dx = me.clientX - resizeStartPos.x;
+                const dy = me.clientY - resizeStartPos.y;
+                resizeTarget.width = Math.max(100, resizeStartPos.w + dx);
+                resizeTarget.height = Math.max(60, resizeStartPos.h + dy);
+                renderBoard();
+            };
+            
+            const upHandler = () => {
+                isResizing = false;
+                window.removeEventListener('mousemove', moveHandler);
+                window.removeEventListener('mouseup', upHandler);
+            };
+            
+            window.addEventListener('mousemove', moveHandler);
+            window.addEventListener('mouseup', upHandler);
         }
         
         function drawConnections() {
@@ -522,7 +591,6 @@
                 const getAnchorPos = (rect, anchor) => {
                     const midX = rect.left + rect.width / 2;
                     const midY = rect.top + rect.height / 2;
-                    
                     switch(anchor) {
                         case 'top': return { x: midX, y: rect.top };
                         case 'bottom': return { x: midX, y: rect.bottom };
@@ -539,12 +607,11 @@
                 const start = getAnchorPos(fromRect, conn.fromAnchor);
                 const end = getAnchorPos(toRect, conn.toAnchor);
                 
-                const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 const dx = end.x - start.x;
                 const dy = end.y - start.y;
-                
                 const d = `M ${start.x} ${start.y} C ${start.x + dx/2} ${start.y}, ${end.x - dx/2} ${end.y}, ${end.x} ${end.y}`;
                 
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
                 line.setAttribute('d', d);
                 line.setAttribute('stroke', conn.color);
                 line.setAttribute('stroke-width', conn.thickness);
@@ -567,7 +634,6 @@
                 line.setAttribute('class', 'transition-all duration-300');
                 line.onclick = () => openConnModal(conn.id);
                 line.style.cursor = 'pointer';
-                
                 svg.appendChild(line);
             });
             
@@ -576,13 +642,12 @@
                 <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
                     <path d="M0,0 L10,5 L0,10 Z" fill="#60a5fa" />
                 </marker>
-S`;
+            `;
             svg.appendChild(defs);
         }
         
         window.addEventListener('resize', drawConnections);
         window.addEventListener('scroll', drawConnections);
-        
         renderBoard();
     </script>
 </body>
