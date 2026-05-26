@@ -3,349 +3,256 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Interactive Planning Board 2.0</title>
-    <script src="https://cdn.tailwindcss.com"></script>
+    <title>Fray | Evidence Planning Board</title>
     <style>
         :root {
-            --bg-color: #0f172a;
-            --lane-bg: #1e293b;
-            --border-color: #334155;
+            --bg-color: #1a1a1a;
+            --board-color: #2c2c2c;
+            --text-color: #e0e0e0;
+            --accent-color: #f1c40f;
+            --note-bg: #fff9c4;
+            --note-text: #333;
         }
-        body {
-            background-color: var(--bg-color);
-            color: #f8fafc;
-            overflow-x: auto;
-            font-family: 'Inter', system-ui, -apple-system, sans-serif;
-        }
-        .board-container {
-            display: flex;
-            gap: 1.5rem;
-            padding: 2rem;
-            min-height: calc(100vh - 100px);
-            align-items: flex-start;
-        }
-        .phase-lane {
-            background-color: var(--lane-bg);
-            border: 1px solid var(--border-color);
-            border-radius: 0.75rem;
-            min-width: 320px;
-            max-width: 450px;
-            display: flex;
-            flex-direction: column;
-            transition: all 0.3s ease;
-        }
-        .phase-lane.hidden-divider {
-            background-color: transparent;
-            border: none;
-            background-image: linear-gradient(to right, var(--border-color) 1px, transparent 1px);
-            background-size: 320px 100%;
-        }
-        .job-card {
-            cursor: pointer;
-            transition: transform 0.1s, box-shadow 0.1s;
-            position: relative;
-        }
-        .job-card:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
-        }
-        .job-card.selected {
-            outline: 3px solid #3b82f6;
-            outline-offset: 2px;
-        }
-        #canvas-svg {
-            position: absolute;
-            top: 0;
-            left: 0;
+
+        body, html {
+            margin: 0;
+            padding: 0;
             width: 100%;
             height: 100%;
-            pointer-events: none;
-            z-index: 0;
+            overflow: hidden;
+            background-color: var(--bg-color);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: var(--text-color);
         }
-        .job-wrapper {
+
+        #board-container {
             position: relative;
-            z-index: 10;
+            width: 100vw;
+            height: 100vh;
+            background-color: var(--board-color);
+            background-image: 
+                radial-gradient(circle, #3a3a3a 1px, transparent 1px);
+            background-size: 30px 30px;
+            overflow: hidden;
         }
-        .color-dot {
-            width: 12px;
-            height: 12px;
+
+        #toolbar {
+            position: fixed;
+            top: 20px;
+            left: 20px;
+            display: flex;
+            gap: 10px;
+            z-index: 1000;
+            background: rgba(0,0,0,0.6);
+            padding: 10px;
+            border-radius: 8px;
+            backdrop-filter: blur(5px);
+            border: 1px solid #444;
+        }
+
+        button {
+            padding: 8px 16px;
+            cursor: pointer;
+            background: #444;
+            color: white;
+            border: 1px solid #666;
+            border-radius: 4px;
+            font-weight: bold;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            background: #555;
+            border-color: var(--accent-color);
+        }
+
+        button.clear-btn {
+            background: #c0392b;
+        }
+
+        button.clear-btn:hover {
+            background: #e74c3c;
+        }
+
+        .post-it {
+            position: absolute;
+            width: 200px;
+            min-height: 150px;
+            background-color: var(--note-bg);
+            color: var(--note-text);
+            padding: 15px;
+            box-shadow: 5px 5px 15px rgba(0,0,0,0.3);
+            cursor: grab;
+            user-select: none;
+            font-family: 'Comic Sans MS', cursive, sans-serif;
+            display: flex;
+            flex-direction: column;
+            transition: transform 0.1s;
+        }
+
+        .post-it:active {
+            cursor: grabbing;
+            transform: scale(1.02) rotate(-1deg);
+            z-index: 999 !important;
+        }
+
+        .post-it textarea {
+            width: 100%;
+            height: 120px;
+            border: none;
+            background: transparent;
+            resize: none;
+            font-family: inherit;
+            font-size: 16px;
+            outline: none;
+            color: inherit;
+        }
+
+        .post-it .delete-note {
+            position: absolute;
+            top: -10px;
+            right: -10px;
+            width: 20px;
+            height: 20px;
+            background: #ff4444;
+            color: white;
             border-radius: 50%;
-            display: inline-block;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+
+        .post-it:hover .delete-note {
+            display: flex;
+        }
+
+        /* Responsive logic for wide screens */
+        @media (min-width: 1920px) {
+            #board-container {
+                background-size: 40px 40px;
+            }
         }
     </style>
 </head>
 <body>
 
-    <!-- Top Navigation -->
-    <header class="h-16 border-b border-slate-700 flex items-center justify-between px-6 sticky top-0 bg-slate-900/80 backdrop-blur-md z-50">
-        <div class="flex items-center gap-4">
-            <h1 class="text-xl font-bold tracking-tight text-white">Planning Board <span class="text-blue-500">2.0</span></h1>
-            <button onclick="addPhase()" class="bg-blue-600 hover:bg-blue-500 text-white px-3 py-1.5 rounded-md text-sm font-medium transition-colors flex items-center gap-2">
-                <span>+</span> Add Phase
-            </button>
-        </div>
-        
-        <div class="flex items-center gap-6">
-            <div class="flex items-center gap-2 text-sm text-slate-400">
-                <input type="checkbox" id="toggleDividers" onchange="toggleDividers()" class="w-4 h-4 rounded border-slate-600 bg-slate-700 text-blue-600 focus:ring-blue-500">
-                <label for="toggleDividers">Hide Phase Dividers</label>
-            </div>
-            <button onclick="clearAllConnections()" class="text-xs text-red-400 hover:text-red-300 underline">Clear All Arrows</button>
-        </div>
-    </header>
-
-    <div class="relative">
-        <!-- SVG Layer for Arrows -->
-        <svg id="canvas-svg"></svg>
-
-        <main id="board" class="board-container">
-            <!-- Phases will be injected here -->
-        </main>
+    <div id="toolbar">
+        <button onclick="createNote()">+ Add Note</button>
+        <button class="clear-btn" onclick="clearBoard()">🗑️ Clear Board</button>
+        <span style="align-self: center; font-size: 12px; opacity: 0.6; margin-left: 10px;">Auto-saves to LocalStorage</span>
     </div>
 
-    <!-- Job Modal -->
-    <div id="jobModal" class="fixed inset-0 bg-black/60 backdrop-blur-sm hidden items-center justify-center z-[100]">
-        <div class="bg-slate-800 p-6 rounded-xl border border-slate-600 w-full max-w-md shadow-2xl">
-            <h3 id="modalTitle" class="text-lg font-bold mb-4">Job Details</h3>
-            <div class="space-y-4">
-                <div>
-                    <label class="block text-xs text-slate-400 mb-1">Job Title</label>
-                    <input type="text" id="jobTitle" class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                </div>
-                <div>
-                    <label class="block text-xs text-slate-400 mb-1">Details</label>
-                    <textarea id="jobDesc" rows="3" class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"></textarea>
-                </div>
-                <div>
-                    <label class="block text-xs text-slate-400 mb-1">Responsible</label>
-                    <input type="text" id="jobUser" class="w-full bg-slate-700 border border-slate-600 rounded p-2 text-white focus:outline-none focus:ring-2 focus:ring-blue-500">
-                </div>
-                <div>
-                    <label class="block text-xs text-slate-400 mb-1">Color</label>
-                    <div class="flex gap-2 mt-2">
-                        <button onclick="setJobColor('#3b82f6')" class="w-6 h-6 rounded-full bg-blue-500 border-2 border-transparent" data-color="#3b82f6"></button>
-                        <button onclick="setJobColor('#ef4444')" class="w-6 h-6 rounded-full bg-red-500 border-2 border-transparent" data-color="#ef4444"></button>
-                        <button onclick="setJobColor('#10b981')" class="w-6 h-6 rounded-full bg-emerald-500 border-2 border-transparent" data-color="#10b981"></button>
-                        <button onclick="setJobColor('#f59e0b')" class="w-6 h-6 rounded-full bg-amber-500 border-2 border-transparent" data-color="#f59e0b"></button>
-                        <button onclick="setJobColor('#a855f7')" class="w-6 h-6 rounded-full bg-purple-500 border-2 border-transparent" data-color="#a855f7"></button>
-                        <button onclick="setJobColor('#64748b')" class="w-6 h-6 rounded-full bg-slate-500 border-2 border-transparent" data-color="#64748b"></button>
-                    </div>
-                </div>
-            </div>
-            <div class="flex justify-end gap-3 mt-6">
-                <button onclick="closeModal()" class="px-4 py-2 text-slate-400 hover:text-white transition-colors">Cancel</button>
-                <button onclick="saveJob()" class="bg-blue-600 hover:bg-blue-500 text-white px-4 py-2 rounded-md font-medium">Save Job</button>
-            </div>
-        </div>
-    </div>
+    <div id="board-container"></div>
 
     <script>
-        let state = {
-            phases: [],
-            jobs: [],
-            connections: [],
-            selectedJobId: null,
-            currentColor: '#3b82f6'
-        };
+        const board = document.getElementById('board-container');
+        let notes = JSON.parse(localStorage.getItem('fray_board_notes')) || [];
 
-        let currentEditingJobId = null;
-
-        function addPhase() {
-            const name = prompt("Enter Phase Name:", `Phase ${state.phases.length + 1}`);
-            if (!name) return;
-            
-            const phaseId = 'phase_' + Date.now();
-            state.phases.push({ id: phaseId, name: name });
-            renderBoard();
+        function save() {
+            localStorage.setItem('fray_board_notes', JSON.stringify(notes));
         }
 
-        function addJob(phaseId) {
-            const jobId = 'job_' + Date.now();
-            state.jobs.push({
-                id: jobId,
-                phaseId: phaseId,
-                title: 'New Job',
-                desc: '',
-                user: '',
-                color: state.currentColor
-            });
-            openJobModal(jobId);
-            renderBoard();
-        }
+        function createNote(x = 100, y = 100, text = '', id = null) {
+            const noteId = id || Date.now();
+            const noteEl = document.createElement('div');
+            noteEl.className = 'post-it';
+            noteEl.id = `note-${noteId}`;
+            noteEl.style.left = x + 'px';
+            noteEl.style.top = y + 'px';
+            noteEl.style.zIndex = notes.length + 1;
 
-        function openJobModal(jobId) {
-            currentEditingJobId = jobId;
-            const job = state.jobs.find(j => j.id === jobId);
-            
-            document.getElementById('jobTitle').value = job.title;
-            document.getElementById('jobDesc').value = job.desc;
-            document.getElementById('jobUser').value = job.user;
-            setJobColor(job.color);
-            
-            document.getElementById('jobModal').style.display = 'flex';
-        }
+            const deleteBtn = document.createElement('div');
+            deleteBtn.className = 'delete-note';
+            deleteBtn.innerText = '×';
+            deleteBtn.onclick = () => {
+                noteEl.remove();
+                notes = notes.filter(n => n.id !== noteId);
+                save();
+            };
 
-        function setJobColor(color) {
-            state.currentColor = color;
-            document.querySelectorAll('.color-dot, [data-color]').forEach(el => {
-                el.style.borderColor = el.getAttribute('data-color') === color ? '#fff' : 'transparent';
-            });
-        }
+            const textarea = document.createElement('textarea');
+            textarea.value = text;
+            textarea.placeholder = 'Type something...';
+            textarea.oninput = (e) => {
+                const note = notes.find(n => n.id === noteId);
+                if (note) note.text = e.target.value;
+                save();
+            };
 
-        function saveJob() {
-            const job = state.jobs.find(j => j.id === currentEditingJobId);
-            job.title = document.getElementById('jobTitle').value;
-            job.desc = document.getElementById('jobDesc').value;
-            job.user = document.getElementById('jobUser').value;
-            job.color = state.currentColor;
-            
-            closeModal();
-            renderBoard();
-        }
+            noteEl.appendChild(deleteBtn);
+            noteEl.appendChild(textarea);
+            board.appendChild(noteEl);
 
-        function closeModal() {
-            document.getElementById('jobModal').style.display = 'none';
-            currentEditingJobId = null;
-        }
-
-        function toggleDividers() {
-            const isHidden = document.getElementById('toggleDividers').checked;
-            document.querySelectorAll('.phase-lane').forEach(lane => {
-                isHidden ? lane.classList.add('hidden-divider') : lane.classList.remove('hidden-divider');
-            });
-        }
-
-        function selectJob(jobId) {
-            if (state.selectedJobId === null) {
-                state.selectedJobId = jobId;
-                renderBoard();
-            } else if (state.selectedJobId === jobId) {
-                state.selectedJobId = null;
-                renderBoard();
-            } else {
-                // Create connection
-                createConnection(state.selectedJobId, jobId);
-                state.selectedJobId = null;
-                renderBoard();
+            if (!id) {
+                notes.push({ id: noteId, x, y, text });
+                save();
             }
+
+            makeDraggable(noteEl, noteId);
         }
 
-        function createConnection(from, to) {
-            // Check if reverse exists
-            const existing = state.connections.find(c => c.from === to && c.to === from);
-            if (existing) {
-                // Upgrade to Bi-directional
-                existing.bidirectional = true;
-            } else {
-                state.connections.push({ from, to, bidirectional: false });
+        function makeDraggable(el, id) {
+            let pos1 = 0, pos2 = 0, pos3 = 0, pos4 = 0;
+
+            el.onmousedown = dragMouseDown;
+
+            function dragMouseDown(e) {
+                if (e.target.tagName === 'TEXTAREA') return;
+                e.preventDefault();
+                pos3 = e.clientX;
+                pos4 = e.clientY;
+                document.onmouseup = closeDragElement;
+                document.onmousemove = elementDrag;
+                el.style.zIndex = 1000;
             }
-        }
 
-        function clearAllConnections() {
-            state.connections = [];
-            renderBoard();
-        }
-
-        function renderBoard() {
-            const board = document.getElementById('board');
-            board.innerHTML = '';
-
-            state.phases.forEach(phase => {
-                const lane = document.createElement('div');
-                lane.className = `phase-lane ${document.getElementById('toggleDividers').checked ? 'hidden-divider' : ''}`;
+            function elementDrag(e) {
+                e.preventDefault();
+                pos1 = pos3 - e.clientX;
+                pos2 = pos4 - e.clientY;
+                pos3 = e.clientX;
+                pos4 = e.clientY;
                 
-                lane.innerHTML = `
-                    <div class="p-4 border-b border-slate-700 flex justify-between items-center bg-slate-800/50 rounded-t-xl">
-                        <h2 class="font-bold text-slate-200">${phase.name}</h2>
-                        <button onclick="addJob('${phase.id}')" class="text-xs bg-slate-700 hover:bg-slate-600 px-2 py-1 rounded text-slate-300 transition-colors">+ Job</button>
-                    </div>
-                    <div class="p-3 space-y-3 flex-1">
-                        ${state.jobs.filter(j => j.phaseId === phase.id).map(job => `
-                            <div onclick="selectJob('${job.id}')" 
-                                 class="job-wrapper">
-                                <div class="job-card p-3 rounded-lg border-l-4 ${state.selectedJobId === job.id ? 'selected' : ''}" 
-                                     style="background-color: #2d3748; border-color: ${job.color}">
-                                    <div class="flex justify-between items-start mb-1">
-                                        <span class="font-semibold text-sm text-slate-100">${job.title}</span>
-                                        <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-700 text-slate-400">${job.user || 'Unassigned'}</span>
-                                    </div>
-                                    <p class="text-xs text-slate-400 line-clamp-2">${job.desc || 'No details...'}</p>
-                                </div>
-                            </div>
-                        `).join('')}
-                    </div>
-                `;
-                board.appendChild(lane);
-            });
-
-            drawConnections();
-        }
-
-        function drawConnections() {
-            const svg = document.getElementById('canvas-svg');
-            svg.innerHTML = '';
-            
-            const offset = document.body.getBoundingClientRect();
-            
-            state.connections.forEach(conn => {
-                const fromEl = document.querySelector(`[onclick="selectJob('${conn.from}')"]`);
-                const toEl = document.querySelector(`[onclick="selectJob('${conn.to}')"]`);
+                const newTop = el.offsetTop - pos2;
+                const newLeft = el.offsetLeft - pos1;
                 
-                if (!fromEl || !toEl) return;
+                el.style.top = newTop + "px";
+                el.style.left = newLeft + "px";
 
-                const fromRect = fromEl.getBoundingClientRect();
-                const toRect = toEl.getBoundingClientRect();
-
-                const startX = fromRect.left + fromRect.width / 2;
-                const startY = fromRect.top + fromRect.height / 2;
-                const endX = toRect.left + toRect.width / 2;
-                const endY = toRect.top + toRect.height / 2;
-
-                const line = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                const dx = endX - startX;
-                const dy = endY - startY;
-                const dr = 20; // curve intensity
-                
-                // Quadratic bezier for smooth flow
-                const d = `M ${startX} ${startY} C ${startX + dx/2} ${startY}, ${endX - dx/2} ${endY}, ${endX} ${endY}`;
-                
-                line.setAttribute('d', d);
-                line.setAttribute('stroke', '#60a5fa');
-                line.setAttribute('stroke-width', '2');
-                line.setAttribute('fill', 'none');
-                line.setAttribute('marker-end', 'url(#arrow)');
-                line.setAttribute('class', 'transition-all duration-300');
-
-                if (conn.bidirectional) {
-                    const revLine = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-                    const revD = `M ${endX} ${endY} C ${endX - dx/2} ${endY}, ${startX + dx/2} ${startY}, ${startX} ${startY}`;
-                    revLine.setAttribute('d', revD);
-                    revLine.setAttribute('stroke', '#60a5fa');
-                    revLine.setAttribute('stroke-width', '2');
-                    revLine.setAttribute('fill', 'none');
-                    revLine.setAttribute('marker-end', 'url(#arrow)');
-                    svg.appendChild(revLine);
+                const note = notes.find(n => n.id === id);
+                if (note) {
+                    note.x = newLeft;
+                    note.y = newTop;
                 }
-                
-                svg.appendChild(line);
-            });
+            }
 
-            // Add arrow marker definition
-            const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-            defs.innerHTML = `
-                <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="5" orient="auto">
-                    <path d="M0,0 L10,5 L0,10 Z" fill="#60a5fa" />
-                </marker>
-            `;
-            svg.appendChild(defs);
+            function closeDragElement() {
+                document.onmouseup = null;
+                document.onmousemove = null;
+                save();
+                // simple z-index management
+                el.style.zIndex = notes.length;
+            }
         }
 
-        window.addEventListener('resize', drawConnections);
-        window.addEventListener('scroll', drawConnections);
-        
-        // Initial render
-        renderBoard();
+        function clearBoard() {
+            if (confirm('Are you sure you want to clear all notes? This cannot be undone.')) {
+                notes = [];
+                localStorage.removeItem('fray_board_notes');
+                board.innerHTML = '';
+                renderNotes();
+            }
+        }
 
+        function renderNotes() {
+            board.innerHTML = '';
+            notes.forEach(n => createNote(n.x, n.y, n.text, n.id));
+        }
+
+        renderNotes();
     </script>
 </body>
 </html>
