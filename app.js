@@ -337,10 +337,14 @@ container.addEventListener('pointerdown', (e) => {
     } else if (state.tool === 'text') {
         const textEl = { id: Date.now(), type: 'text', x: pos.x, y: pos.y, text: 'Text', stroke: state.strokeColor, strokeWidth: state.strokeWidth, fill: state.fillColor };
         state.elements.push(textEl);
+        
+        // Switch back to select tool manually to avoid focus issues
+        document.querySelectorAll('.tool-btn').forEach(b => b.classList.remove('active'));
+        document.querySelector('[data-tool="select"]').classList.add('active');
+        state.tool = 'select';
+        
         state.selection = [textEl];
         startTextEditing(textEl);
-        // Switch back to select tool automatically
-        document.querySelector('[data-tool="select"]').click();
     } else {
         state.isDrawing = true;
         state.currentElement = { id: Date.now(), type: state.tool, x: pos.x, y: pos.y, width: 0, height: 0, stroke: state.strokeColor, strokeWidth: state.strokeWidth, fill: state.fillColor, points: [pos] };
@@ -466,8 +470,10 @@ function startTextEditing(el) {
     textEditor.style.height = `${24 * state.scale}px`;
     
     // Select all text
-    textEditor.focus();
-    textEditor.select();
+    setTimeout(() => {
+        textEditor.focus();
+        textEditor.select();
+    }, 10);
 }
 
 function finishTextEditing() {
